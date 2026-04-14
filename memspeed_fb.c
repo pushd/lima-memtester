@@ -33,7 +33,7 @@ void *fb_blank_thread(void *data)
 {
 	int fd, ret;
 
-	fd = open("/dev/fb0", O_RDWR);
+	fd = open("/dev/graphics/fb0", O_RDWR);
 	assert(fd != -1);
 
 	while (1) {
@@ -55,7 +55,7 @@ void *fb_scanout_thread(void *data)
 	double framebuffer_size;
 	double start_time;
 
-	fd = open("/dev/fb0", O_RDWR);
+	fd = open("/dev/graphics/fb0", O_RDWR);
 	assert(fd != -1);
 
 	ret = ioctl(fd, FBIOGET_VSCREENINFO, &var);

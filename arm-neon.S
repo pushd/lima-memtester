@@ -36,7 +36,9 @@
     .hidden \function_name
     .type \function_name, %function
 #endif
+#ifndef __clang__
 .func \function_name
+#endif
 \function_name:
     DST         .req r0
     SRC         .req r1
@@ -70,7 +72,9 @@ asm_function aligned_block_read_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* Actually this calculates a sum of 32-bit values */
 asm_function aligned_block_read_pf32_neon
@@ -101,7 +105,9 @@ asm_function aligned_block_read_pf32_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* Actually this calculates a sum of 32-bit values */
 asm_function aligned_block_read_pf64_neon
@@ -131,7 +137,9 @@ asm_function aligned_block_read_pf64_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* Actually this calculates a sum of 32-bit values */
 asm_function aligned_block_read2_neon
@@ -160,7 +168,9 @@ asm_function aligned_block_read2_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* Actually this calculates a sum of 32-bit values */
 asm_function aligned_block_read2_pf32_neon
@@ -191,7 +201,9 @@ asm_function aligned_block_read2_pf32_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* Actually this calculates a sum of 32-bit values */
 asm_function aligned_block_read2_pf64_neon
@@ -221,7 +233,9 @@ asm_function aligned_block_read2_pf64_neon
     vpadd.u32   d31, d31, d31
     vmov.u32    r0, d31[0]
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_neon
 0:
@@ -230,7 +244,9 @@ asm_function aligned_block_copy_neon
     subs        SIZE, SIZE, #32
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_unrolled_neon
     vpush       {d8-d15}
@@ -248,7 +264,9 @@ asm_function aligned_block_copy_unrolled_neon
     bgt         0b
     vpop        {d8-d15}
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_pf32_neon
 0:
@@ -258,7 +276,9 @@ asm_function aligned_block_copy_pf32_neon
     subs        SIZE, SIZE, #32
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_unrolled_pf32_neon
     vpush       {d8-d15}
@@ -284,7 +304,9 @@ asm_function aligned_block_copy_unrolled_pf32_neon
     bgt         0b
     vpop        {d8-d15}
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_pf64_neon
 0:
@@ -296,7 +318,9 @@ asm_function aligned_block_copy_pf64_neon
     subs        SIZE, SIZE, #64
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_unrolled_pf64_neon
     vpush       {d8-d15}
@@ -318,7 +342,9 @@ asm_function aligned_block_copy_unrolled_pf64_neon
     bgt         0b
     vpop        {d8-d15}
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_backwards_neon
     add         SRC, SRC, SIZE
@@ -332,7 +358,9 @@ asm_function aligned_block_copy_backwards_neon
     subs        SIZE, SIZE, #32
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_backwards_pf32_neon
     add         SRC, SRC, SIZE
@@ -347,7 +375,9 @@ asm_function aligned_block_copy_backwards_pf32_neon
     subs        SIZE, SIZE, #32
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_backwards_pf64_neon
     add         SRC, SRC, SIZE
@@ -364,7 +394,9 @@ asm_function aligned_block_copy_backwards_pf64_neon
     subs        SIZE, SIZE, #64
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_fill_neon
     vld1.8      {d0, d1, d2, d3}, [SRC]!
@@ -374,7 +406,9 @@ asm_function aligned_block_fill_neon
     subs        SIZE, SIZE, #64
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_fill_backwards_neon
     add         SRC, SRC, SIZE
@@ -387,7 +421,9 @@ asm_function aligned_block_fill_backwards_neon
     subs        SIZE, SIZE, #32
     bgt         0b
     bx          lr
+#ifndef __clang__
 .endfunc
+#endif
 
 /* some code for older ARM processors */
 
@@ -402,7 +438,9 @@ asm_function aligned_block_fill_stm4_armv4
     subs        SIZE, SIZE, #64
     bgt         0b
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_fill_stm8_armv4
     push        {r4-r12, lr}
@@ -413,7 +451,9 @@ asm_function aligned_block_fill_stm8_armv4
     subs        SIZE, SIZE, #64
     bgt         0b
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_fill_strd_armv5te
     push        {r4-r12, lr}
@@ -430,7 +470,9 @@ asm_function aligned_block_fill_strd_armv5te
     subs        SIZE, SIZE, #64
     bgt         0b
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_incr_armv5te
     push        {r4-r12, lr}
@@ -446,7 +488,9 @@ asm_function aligned_block_copy_incr_armv5te
     stmia       DST!, {r8-r11}
     bgt         0b
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_wrap_armv5te
     push        {r4-r12, lr}
@@ -462,7 +506,9 @@ asm_function aligned_block_copy_wrap_armv5te
     stmia       DST!, {r8-r11}
     bgt         0b
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 asm_function aligned_block_copy_vfp
     push        {r4-r12, lr}
@@ -474,6 +520,8 @@ asm_function aligned_block_copy_vfp
     bgt         0b
     vpop        {d8-d15}
     pop         {r4-r12, pc}
+#ifndef __clang__
 .endfunc
+#endif
 
 #endif

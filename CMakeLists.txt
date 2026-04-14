@@ -65,4 +65,14 @@ add_executable(lima-memspeed
 target_link_libraries(lima-memspeed m ${RT_LIB} ${CMAKE_THREAD_LIBS_INIT})
 
 
-install_programs(/bin FILES lima-textured-cube lima-memtester lima-memspeed)
+add_executable(memtester
+               memtester-4.3.0/memtester.c memtester-4.3.0/tests.c
+               memtester-4.3.0/arm-asm-helpers.S)
+
+set_target_properties(memtester PROPERTIES
+    COMPILE_DEFINITIONS "POSIX;_POSIX_C_SOURCE=200809L;_FILE_OFFSET_BITS=64;TEST_NARROW_WRITES"
+    LINK_FLAGS "-Wl,--defsym,main=memtester_main")
+
+target_link_libraries(memtester m)
+
+install_programs(/bin FILES lima-textured-cube lima-memtester lima-memspeed memtester)
