@@ -40,6 +40,7 @@
 
 #define u32 uint32_t
 #include "linux/mali_ioctl.h"
+#include "linux/mali_ioctl_r8p1.h"
 
 #include "version.h"
 #include "limare.h"
@@ -74,6 +75,33 @@ limare_fd_open(struct limare_state *state)
 		return errno;
 	}
 
+	/* Try r8p1 first: its GET_API_VERSION takes a u32 and the encoded
+	 * ioctl number has size=4, distinct from the older struct-pointer
+	 * encoding. */
+	{
+		u32 v8 = _MAKE_VERSION_ID(900); /* what we claim to support */
+		ret = ioctl(state->fd, MALI_IOC_GET_API_VERSION_R8P1, &v8);
+		if (ret == 0) {
+			state->kernel_version = _GET_VERSION(v8);
+			printf("Kernel driver is r8p1-era, API version %d\n",
+			       state->kernel_version);
+			return 0;
+		}
+		/* Also try the V2 struct variant used by newer drivers */
+		{
+			_mali_uk_get_api_version_v2_s_r8p1 v2 = { 0 };
+			v2.version = _MAKE_VERSION_ID(900);
+			ret = ioctl(state->fd, MALI_IOC_GET_API_VERSION_V2_R8P1,
+				    &v2);
+			if (ret == 0) {
+				state->kernel_version = _GET_VERSION(v2.version);
+				printf("Kernel driver is r8p1-era (V2), API "
+				       "version %d\n", state->kernel_version);
+				return 0;
+			}
+		}
+	}
+
 	ret = ioctl(state->fd, MALI_IOC_GET_API_VERSION, &version);
 	if (ret == -EPERM)
 		ret = ioctl(state->fd, MALI_IOC_GET_API_VERSION_R3P1, &version);
@@ -101,7 +129,44 @@ limare_gpu_detect(struct limare_state *state)
 	_mali_uk_get_gp_core_version_s gp_version = { 0 };
 	int ret, type;
 
-	if (state->kernel_version < MALI_DRIVER_VERSION_R3P0) {
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		_mali_uk_get_pp_number_of_cores_s_r8p1 pp_n8 = { 0 };
+		_mali_uk_get_pp_core_version_s_r8p1    pp_v8 = { 0 };
+		_mali_uk_get_gp_number_of_cores_s_r8p1 gp_n8 = { 0 };
+		_mali_uk_get_gp_core_version_s_r8p1    gp_v8 = { 0 };
+		ret = ioctl(state->fd, MALI_IOC_PP_NUMBER_OF_CORES_GET_R8P1,
+			    &pp_n8);
+		if (ret) {
+			printf("Error: %s: ioctl(PP_NUMBER_OF_CORES_GET r8p1) "
+			       "failed: %s\n", __func__, strerror(errno));
+			return ret;
+		}
+		ret = ioctl(state->fd, MALI_IOC_PP_CORE_VERSION_GET_R8P1,
+			    &pp_v8);
+		if (ret) {
+			printf("Error: %s: ioctl(PP_CORE_VERSION_GET r8p1) "
+			       "failed: %s\n", __func__, strerror(errno));
+			return ret;
+		}
+		ret = ioctl(state->fd, MALI_IOC_GP_NUMBER_OF_CORES_GET_R8P1,
+			    &gp_n8);
+		if (ret) {
+			printf("Error: %s: ioctl(GP_NUMBER_OF_CORES_GET r8p1) "
+			       "failed: %s\n", __func__, strerror(errno));
+			return ret;
+		}
+		ret = ioctl(state->fd, MALI_IOC_GP_CORE_VERSION_GET_R8P1,
+			    &gp_v8);
+		if (ret) {
+			printf("Error: %s: ioctl(GP_CORE_VERSION_GET r8p1) "
+			       "failed: %s\n", __func__, strerror(errno));
+			return ret;
+		}
+		pp_number.number_of_cores = pp_n8.number_of_total_cores;
+		pp_version.version = pp_v8.version;
+		gp_number.number_of_cores = gp_n8.number_of_cores;
+		gp_version.version = gp_v8.version;
+	} else if (state->kernel_version < MALI_DRIVER_VERSION_R3P0) {
 		ret = ioctl(state->fd, MALI_IOC_PP_NUMBER_OF_CORES_GET_R2P1,
 			    &pp_number);
 		if (ret) {
@@ -230,9 +295,42 @@ limare_gpu_detect(struct limare_state *state)
  * TODO: MEMORY MANAGEMENT!!!!!!!!!
  *
  */
+/* r8p1: MEM_INIT no longer exists. Each region requires its own MEM_ALLOC
+ * call at a caller-chosen gpu_vaddr, after which mmap(offset=gpu_vaddr)
+ * produces the CPU mapping. */
+int
+limare_r8p1_mem_alloc(struct limare_state *state, unsigned int gpu_vaddr,
+		      unsigned int size)
+{
+	_mali_uk_alloc_mem_s_r8p1 a = { 0 };
+	int ret;
+
+	a.gpu_vaddr = gpu_vaddr;
+	a.vsize = size;
+	a.psize = size;
+	a.flags = 0; /* default: map to GPU on alloc, no defer */
+	a.secure_shared_fd = -1;
+
+	ret = ioctl(state->fd, MALI_IOC_MEM_ALLOC_R8P1, &a);
+	if (ret) {
+		printf("Error: ioctl MEM_ALLOC_R8P1(0x%08x, 0x%x) failed: "
+		       "%s\n", gpu_vaddr, size, strerror(errno));
+		return errno ? errno : -1;
+	}
+	return 0;
+}
+
 static int
 limare_mem_init(struct limare_state *state)
 {
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		/* No global MEM_INIT in r8p1. Pick a base in GPU virtual
+		 * address space where our allocations will live. */
+		state->mem_base = 0x10000000;
+		return 0;
+	}
+
+	{
 	_mali_uk_init_mem_s mem_init = { 0 };
 	int ret;
 
@@ -249,6 +347,7 @@ limare_mem_init(struct limare_state *state)
 	state->mem_base = mem_init.mali_address_base;
 
 	return 0;
+	}
 }
 
 /*
@@ -450,6 +549,11 @@ limare_state_setup(struct limare_state *state, int width, int height,
 	 */
 	state->frame_mem_physical = state->mem_base;
 	state->frame_mem_size = FRAME_COUNT * FRAME_MEMORY_SIZE;
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		if (limare_r8p1_mem_alloc(state, state->frame_mem_physical,
+					  state->frame_mem_size))
+			return -1;
+	}
 	state->frame_mem_address =
 		mmap(NULL, state->frame_mem_size, PROT_READ | PROT_WRITE,
 		     MAP_SHARED, state->fd, state->frame_mem_physical);
@@ -467,6 +571,11 @@ limare_state_setup(struct limare_state *state, int width, int height,
 	state->program_mem_physical = state->frame_mem_physical +
 		state->frame_mem_size;
 	state->program_mem_size = LIMARE_PROGRAM_COUNT * LIMARE_PROGRAM_SIZE;
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		if (limare_r8p1_mem_alloc(state, state->program_mem_physical,
+					  state->program_mem_size))
+			return -1;
+	}
 	state->program_mem_address =
 		mmap(NULL, state->program_mem_size, PROT_READ | PROT_WRITE,
 		     MAP_SHARED, state->fd, state->program_mem_physical);
@@ -481,6 +590,11 @@ limare_state_setup(struct limare_state *state, int width, int height,
 	state->aux_mem_size = AUX_MEMORY_SIZE;
 	state->aux_mem_physical =
 		state->program_mem_physical + state->program_mem_size;
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		if (limare_r8p1_mem_alloc(state, state->aux_mem_physical,
+					  state->aux_mem_size))
+			return -1;
+	}
 	state->aux_mem_address = mmap(NULL, state->aux_mem_size,
 				       PROT_READ | PROT_WRITE,
 				       MAP_SHARED, state->fd,

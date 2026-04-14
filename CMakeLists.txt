@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project(lima-memtester ASM C)
 find_package(Threads REQUIRED)
-set(CMAKE_C_FLAGS "-s -static -Os")
+set(CMAKE_C_FLAGS "-Os -fcommon")
 
 add_definitions(-DHAVE_NO_LIBMALI_BLOB -DMESA_EGL_NO_X11_HEADERS)
 include_directories(limadriver/include limadriver/limare/lib
@@ -17,11 +17,18 @@ add_executable(lima-textured-cube
                limadriver/limare/lib/pp.c limadriver/limare/lib/fb.c
                limadriver/limare/lib/texture.c limadriver/limare/lib/jobs.c
                limadriver/limare/lib/symbols.c
-               limadriver/limare/tests/common/companion_texture_flat.c
+               limadriver/limare/tests/common/aura_logo_texture.c
                limadriver/limare/tests/common/cube_mesh.c
                limadriver/limare/tests/common/esTransform.c)
 
-target_link_libraries(lima-textured-cube m rt ${CMAKE_THREAD_LIBS_INIT})
+if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "Android" OR
+   CMAKE_C_COMPILER MATCHES "android")
+    set(RT_LIB "")
+else()
+    set(RT_LIB "rt")
+endif()
+
+target_link_libraries(lima-textured-cube m ${RT_LIB} ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(lima-memtester
                lima-memtester.c textured_cube_mainloop.c load_mali_kernel_module.c
@@ -34,12 +41,12 @@ add_executable(lima-memtester
                limadriver/limare/lib/pp.c limadriver/limare/lib/fb.c
                limadriver/limare/lib/texture.c limadriver/limare/lib/jobs.c
                limadriver/limare/lib/symbols.c
-               limadriver/limare/tests/common/companion_texture_flat.c
+               limadriver/limare/tests/common/aura_logo_texture.c
                limadriver/limare/tests/common/cube_mesh.c
                limadriver/limare/tests/common/esTransform.c)
 
 set_target_properties(lima-memtester PROPERTIES COMPILE_DEFINITIONS "MEMTESTER_MODE")
-target_link_libraries(lima-memtester m rt ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(lima-memtester m ${RT_LIB} ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(lima-memspeed
                lima-memspeed.c memspeed_gpu.c memspeed_fb.c arm-neon.S arm-neon.h
@@ -51,11 +58,11 @@ add_executable(lima-memspeed
                limadriver/limare/lib/pp.c limadriver/limare/lib/fb.c
                limadriver/limare/lib/texture.c limadriver/limare/lib/jobs.c
                limadriver/limare/lib/symbols.c
-               limadriver/limare/tests/common/companion_texture_flat.c
+               limadriver/limare/tests/common/aura_logo_texture.c
                limadriver/limare/tests/common/cube_mesh.c
                limadriver/limare/tests/common/esTransform.c)
 
-target_link_libraries(lima-memspeed m rt ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(lima-memspeed m ${RT_LIB} ${CMAKE_THREAD_LIBS_INIT})
 
 
 install_programs(/bin FILES lima-textured-cube lima-memtester lima-memspeed)

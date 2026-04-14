@@ -42,7 +42,7 @@
         .hidden \function_name
         .type \function_name, %function
 #endif
-.func \function_name
+
 \function_name:
 .endm
 
@@ -136,6 +136,6 @@ asm_function compare_regions_helper_neon
 
         vpop            {d8-d15}
         bx              lr
-.endfunc
+
 
 #endif

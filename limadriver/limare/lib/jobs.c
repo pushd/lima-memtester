@@ -37,6 +37,7 @@
 
 #define u32 uint32_t
 #include "linux/mali_ioctl.h"
+#include "linux/mali_ioctl_r8p1.h"
 
 #include "version.h"
 #include "linux/ioctl.h"
@@ -121,12 +122,66 @@ limare_pp_job_wait(struct limare_frame *frame)
 }
 
 static void *
+limare_notification_thread_r8p1(struct limare_state *state)
+{
+	static _mali_uk_wait_for_notification_s_r8p1 wait = { 0 };
+	int ret;
+
+	while (1) {
+		while (1) {
+			ret = ioctl(state->fd,
+				    MALI_IOC_WAIT_FOR_NOTIFICATION_R8P1,
+				    &wait);
+			if (ret == -1) {
+				printf("%s: Error: wait failed: %s\n",
+				       __func__, strerror(errno));
+				exit(-1);
+			}
+
+			if ((wait.type & 0xFF) == 0x10)
+				break;
+
+			printf("%s: notification type 0x%x\n",
+			       __func__, wait.type);
+		}
+
+		if (wait.type == R8P1_MALI_NOTIFICATION_PP_FINISHED) {
+			_mali_uk_job_status_r8p1 status =
+				wait.data.pp_job_finished.status;
+			unsigned int id =
+				(unsigned int)wait.data.pp_job_finished.user_job_ptr;
+
+			if (status != R8P1_MALI_UK_JOB_STATUS_END_SUCCESS)
+				printf("pp job 0x%08x returned 0x%08x\n",
+				       id, status);
+
+			limare_pp_job_done(id);
+		} else if (wait.type == R8P1_MALI_NOTIFICATION_GP_FINISHED) {
+			_mali_uk_job_status_r8p1 status =
+				wait.data.gp_job_finished.status;
+			unsigned int id =
+				(unsigned int)wait.data.gp_job_finished.user_job_ptr;
+
+			if (status != R8P1_MALI_UK_JOB_STATUS_END_SUCCESS)
+				printf("gp job returned 0x%08x\n", status);
+
+			limare_gp_job_done(id);
+		}
+	}
+
+	return NULL;
+}
+
+static void *
 limare_notification_thread(void *arg)
 {
 	struct limare_state *state = arg;
 	static _mali_uk_wait_for_notification_s wait = { 0 };
 	int request;
 	int ret;
+
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1)
+		return limare_notification_thread_r8p1(state);
 
 	if (state->kernel_version < MALI_DRIVER_VERSION_R3P1)
 		request = MALI_IOC_WAIT_FOR_NOTIFICATION;
@@ -265,6 +320,37 @@ limare_gp_job_start_r2p1(struct limare_state *state,
 	return 0;
 }
 
+static int
+limare_gp_job_start_r8p1(struct limare_state *state,
+			 struct limare_frame *frame,
+			 struct lima_gp_frame_registers *frame_regs)
+{
+	_mali_uk_gp_start_job_s_r8p1 job = { 0 };
+	uint32_t timeline_point = 0;
+	int ret;
+
+	job.user_job_ptr = (uint64_t)(frame->id | 0x80000000);
+	job.priority = 1;
+	memcpy(job.frame_registers, frame_regs,
+	       sizeof(struct lima_gp_frame_registers));
+	/* No fence, no timeline in this simple path, but the kernel
+	 * unconditionally put_user()s the timeline point back, so we must
+	 * hand it a valid userspace u32 pointer or it returns ENOENT. */
+	job.fence.sync_fd = -1;
+	job.timeline_point_ptr = (uint64_t)(uintptr_t)&timeline_point;
+	job.varying_memsize = 0;
+	job.deferred_mem_num = 0;
+	job.deferred_mem_list = 0;
+
+	ret = ioctl(state->fd, MALI_IOC_GP_START_JOB_R8P1, &job);
+	if (ret == -1) {
+		printf("%s: Error: failed to start gp job: %s\n",
+		       __func__, strerror(errno));
+		return errno;
+	}
+	return 0;
+}
+
 int
 limare_gp_job_start_r3p0(struct limare_state *state,
 			 struct limare_frame *frame,
@@ -304,7 +390,9 @@ limare_gp_job_start(struct limare_state *state, struct limare_frame *frame)
 	frame_regs.tile_heap_end = frame->mem_physical +
 		frame->tile_heap_offset + frame->tile_heap_size;
 
-	if (state->kernel_version < MALI_DRIVER_VERSION_R3P0)
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1)
+		ret = limare_gp_job_start_r8p1(state, frame, &frame_regs);
+	else if (state->kernel_version < MALI_DRIVER_VERSION_R3P0)
 		ret = limare_gp_job_start_r2p1(state, frame, &frame_regs);
 	else
 		ret = limare_gp_job_start_r3p0(state, frame, &frame_regs);
@@ -464,6 +552,46 @@ limare_m400_pp_job_start_r3p2(struct limare_state *state,
 		return errno;
 	}
 
+	return 0;
+}
+
+int
+limare_m400_pp_job_start_r8p1(struct limare_state *state,
+			      struct limare_frame *frame,
+			      struct lima_m400_pp_frame_registers *frame_regs,
+			      unsigned int addr_frame[7],
+			      unsigned int addr_stack[7],
+			      struct lima_pp_wb_registers *wb_regs)
+{
+	_mali_uk_pp_start_job_s_r8p1 job = { 0 };
+	uint32_t timeline_point = 0;
+	int ret;
+
+	job.user_job_ptr = (uint64_t)(frame->id | 0xC0000000);
+	job.priority = 1;
+
+	memcpy(job.frame_registers, frame_regs,
+	       sizeof(struct lima_m400_pp_frame_registers));
+	memcpy(job.frame_registers_addr_frame, addr_frame, 7 * 4);
+	memcpy(job.frame_registers_addr_stack, addr_stack, 7 * 4);
+	memcpy(job.wb0_registers, wb_regs,
+	       sizeof(struct lima_pp_wb_registers));
+
+	job.num_cores = state->pp_core_count;
+	job.flags = 0;
+	job.num_memory_cookies = 0;
+	job.memory_cookies = 0;
+	job.fence.sync_fd = -1;
+	/* Kernel unconditionally put_user()s the timeline point back; must be
+	 * a valid userspace u32 pointer or it returns ENOENT. */
+	job.timeline_point_ptr = (uint64_t)(uintptr_t)&timeline_point;
+
+	ret = ioctl(state->fd, MALI_IOC_PP_START_JOB_R8P1, &job);
+	if (ret == -1) {
+		printf("%s: Error: failed to start pp job: %s\n",
+		       __func__, strerror(errno));
+		return errno;
+	}
 	return 0;
 }
 

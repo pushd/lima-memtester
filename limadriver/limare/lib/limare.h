@@ -227,6 +227,10 @@ struct limare_state {
 /* from limare.c */
 struct limare_state *limare_init(void);
 
+/* r8p1: per-region MEM_ALLOC before mmap/bind (no-op on older drivers) */
+int limare_r8p1_mem_alloc(struct limare_state *state, unsigned int gpu_vaddr,
+			  unsigned int size);
+
 int limare_state_setup(struct limare_state *state, int width, int height,
 			unsigned int clear_color);
 

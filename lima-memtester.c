@@ -38,7 +38,11 @@ void *fb_unblank_thread(void *data)
 {
 	int fd, ret;
 
+#ifdef __ANDROID__
+	fd = open("/dev/graphics/fb0", O_RDWR);
+#else
 	fd = open("/dev/fb0", O_RDWR);
+#endif
 	assert(fd != -1);
 
 	while (1) {

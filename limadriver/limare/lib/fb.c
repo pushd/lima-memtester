@@ -37,6 +37,7 @@
 
 #define u32 uint32_t
 #include "linux/mali_ioctl.h"
+#include "linux/mali_ioctl_r8p1.h"
 
 #include "limare.h"
 #include "version.h"
@@ -50,7 +51,15 @@ fb_destroy(struct limare_state *state)
 	struct limare_fb *fb = state->fb;
 	int ret;
 
-	if (fb->ump_id != -1) {
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		_mali_uk_unbind_mem_s_r8p1 u = { 0 };
+		u.vaddr = fb->mali_handle;
+		u.flags = R8P1_MALI_MEMORY_BIND_BACKEND_EXTERNAL_MEMORY;
+		ret = ioctl(state->fd, MALI_IOC_MEM_UNBIND_R8P1, &u);
+		if (ret)
+			printf("Error: failed to unbind external memory: %s\n",
+			       strerror(errno));
+	} else if (fb->ump_id != -1) {
 		_mali_uk_release_ump_mem_s release = { 0 };
 
 		release.cookie = fb->mali_handle;
@@ -113,7 +122,7 @@ fb_open(struct limare_state *state)
 
 	fb->ump_id = -1;
 
-#ifndef ANDROID
+#ifndef __ANDROID__
 	if ((state->kernel_version == MALI_DRIVER_VERSION_R3P2) &&
 	    (state->pp_core_count == 4))
 		/* Assume that we are an odroid running over HDMI */
@@ -121,8 +130,8 @@ fb_open(struct limare_state *state)
 	else
 		fbdev_dev = "/dev/fb0";
 #else
-	fbdev_dev = "/dev/graphics/fb0"
-#endif /* ANDROID */
+	fbdev_dev = "/dev/graphics/fb0";
+#endif /* __ANDROID__ */
 
 	fb->fd = open(fbdev_dev, O_RDWR);
 	if (fb->fd == -1) {
@@ -191,8 +200,27 @@ static int
 mali_map_external(struct limare_state *state)
 {
 	struct limare_fb *fb = state->fb;
-	_mali_uk_map_external_mem_s map = { 0 };
 	int ret;
+
+	if (state->kernel_version >= MALI_DRIVER_VERSION_R8P1) {
+		_mali_uk_bind_mem_s_r8p1 b = { 0 };
+		b.vaddr = fb->mali_physical[0];
+		b.size = fb->map_size;
+		b.flags = R8P1_MALI_MEMORY_BIND_BACKEND_EXTERNAL_MEMORY;
+		b.mem_union.bind_ext_memory.phys_addr = fb->fb_physical;
+		b.mem_union.bind_ext_memory.rights = 0;
+		b.mem_union.bind_ext_memory.flags = 0;
+
+		ret = ioctl(state->fd, MALI_IOC_MEM_BIND_R8P1, &b);
+		if (ret)
+			return ret;
+		/* r8p1 uses the vaddr itself as the handle for UNBIND */
+		fb->mali_handle = fb->mali_physical[0];
+		return 0;
+	}
+
+	{
+	_mali_uk_map_external_mem_s map = { 0 };
 
 	map.phys_addr = fb->fb_physical;
 	map.size = fb->map_size;
@@ -209,6 +237,7 @@ mali_map_external(struct limare_state *state)
 	fb->mali_handle = map.cookie;
 
 	return 0;
+	}
 }
 
 static int

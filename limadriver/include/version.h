@@ -34,6 +34,8 @@
 #define MALI_DRIVER_VERSION_R3P1	17
 #define MALI_DRIVER_VERSION_R3P2	19
 #define MALI_DRIVER_VERSION_R3P2_01REL2	20
+/* r8p1 reports _MALI_API_VERSION 900 in its uk_types.h */
+#define MALI_DRIVER_VERSION_R8P1	900
 
 /* As reported by the GP2_CORE_VERSION_GET ioctl. */
 #define MALI_CORE_GP_200	0x0A07
